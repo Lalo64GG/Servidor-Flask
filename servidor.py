@@ -135,7 +135,7 @@ def send_to_aws(temperature, humidity, gas_level):
     headers = {'Content-Type': 'application/json'}
     data = {
         'temperature': temperature, 
-        'humedety': humidity,
+        'humedity': humidity,
         'gas_level': gas_level 
     }
 

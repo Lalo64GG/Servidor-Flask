@@ -26,8 +26,9 @@ def create_table():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            value1 TEXT,
-            value2 TEXT,
+            temperature TEXT,
+            humidity TEXT,
+            gas_level TEXT,
             synced INTEGER DEFAULT 0
         )
     ''')
@@ -48,10 +49,10 @@ def create_tableTables():
     ''')
     db.commit()
 
-def insert_into_db(value1, value2):
+def insert_into_db(temperature, humidity, gas_level):
     db = get_db()
     cursor = db.cursor()
-    cursor.execute('INSERT INTO data (value1, value2) VALUES (?, ?)', (value1, value2))
+    cursor.execute('INSERT INTO data (temperature, humidity, gas_level) VALUES (?, ?, ?)', (temperature, humidity, gas_level))
     db.commit()
 
 def insert_into_table(seat1, seat2, seat3, seat4):
@@ -86,8 +87,8 @@ def process_queue():
         try:
             data = data_queue.get(timeout=1)  # Obtener datos de la cola con timeout de 1 segundo
             if is_internet_available():
-                print(f"Enviando datos a la API de AWS: value1={data['value1']}, value2={data['value2']}")
-                response = send_to_aws(data['value1'], data['value2'])
+                print(f"Enviando datos a la API de AWS: temperature={data['temperature']}, humidity={data['humidity']}, gas_level={data['gas_level']}")
+                response = send_to_aws(data['temperature'], data['humidity'], data['gas_level'])
                 if response and response.status_code == 201:
                     mark_synced(data['id'])  # Marcar como sincronizado en la base de datos local
                     print(f"Datos enviados correctamente a AWS para id={data['id']}")
@@ -129,14 +130,13 @@ def process_table_queue():
             print(f"Error processing table queue: {e}")
             continue
 
-def send_to_aws(value1, value2):
+def send_to_aws(temperature, humidity, gas_level):
     url = 'https://100.24.202.224/record'
     headers = {'Content-Type': 'application/json'}
     data = {
-        'temperature': value2, 
-        'humedity': value1,     
-        'gas_level': "a",       
-        'light': False
+        'temperature': temperature, 
+        'humidety': humidity,
+        'gas_level': gas_level 
     }
 
     try:
@@ -167,22 +167,21 @@ def send_table_to_aws(seat1, seat2, seat3, seat4):
 def receive_data():
     data = request.get_json()
     
-    # Verificar si 'value1' y 'value2' están presentes en los datos recibidos
-    if 'value1' not in data or 'value2' not in data:
-        return jsonify({'error': 'Missing required fields (value1, value2)'}), 400
+    # Verificar si 'temperature' está presente en los datos recibidos
+    if 'temperature' not in data:
+        return jsonify({'error': 'Missing required field (temperature)'}), 400
     
     # Insertar datos en la base de datos local
-    insert_into_db(data['value1'], data['value2'])
+    insert_into_db(data['temperature'], data.get('humidity', ''), data.get('gas_level', ''))
     
     # Agregar datos a la cola para procesar en segundo plano
-    # Generar un ID ficticio para los fines de demostración
     db = get_db()
     cursor = db.cursor()
     cursor.execute('SELECT last_insert_rowid() as id')
     result = cursor.fetchone()
     if result:
         data_id = result['id']
-        data_queue.put({'id': data_id, 'value1': data['value1'], 'value2': data['value2']})
+        data_queue.put({'id': data_id, 'temperature': data['temperature'], 'humidity': data.get('humidity', ''), 'gas_level': data.get('gas_level', '')})
 
     return jsonify({'status': 'ok'})
 
@@ -190,9 +189,9 @@ def receive_data():
 def receive_dataTable():
     data = request.get_json() 
 
-    # Verify that the data is valid
+    # Verificar si 'seat1' está presente en los datos recibidos
     if 'seat1' not in data:
-        return jsonify({'error': 'Missing required field (seat1)' }), 400
+        return jsonify({'error': 'Missing required field (seat1)'}), 400
 
     insert_into_table(data['seat1'], data.get('seat2', 0), data.get('seat3', 0), data.get('seat4', 0))
 
